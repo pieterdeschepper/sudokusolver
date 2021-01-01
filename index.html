@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <style>
+        body {
+            font-family: Helvetica;
+            font-weight: lighter;
+        }
+
+        #container, #container2 {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+        }
+
+        #solve {
+            position: absolute;
+            top: 670px;
+            left: 10px;
+        }
+
+        #solveBruteForce {
+            position: absolute;
+            top: 670px;
+            left: 60px;
+        }
+
+        .row {
+            height: 69px;
+            clear: both;
+        }
+        .column {
+            width: 69px;
+            height: 63px;
+            border: 1px solid black;
+            float: left;
+            font-size: 48px;
+            text-align: center;
+            padding-top: 6px;
+        }
+        .column:first-child {
+            border-left: 2px solid black;
+        }
+        .column:last-child {
+            border-right: 2px solid black;
+        }
+        .column.selected {
+            background: #dddd55;
+        }
+        .row:first-child .column {
+            border-top: 2px solid black;
+        }
+        .row:last-child .column {
+            border-bottom: 2px solid black;
+        }
+
+        .smallrow {
+            height: 23px;
+            clear: both;
+        }
+
+        .smallcolumn {
+            width: 23px;
+            height: 23px;
+            float:left;
+            font-size: 10px;
+            padding-top: 0px;
+        }
+    </style>
+    <meta charset="UTF-8">
+    <title>Sudoku Solver</title>
+</head>
+<body>
+
+
+<div id="container2">
+
+</div>
+<div id="container">
+
+</div>
+
+
+<div id="controls">
+    <button id="solve">Solve</button>
+    <button id="solveBruteForce">Solve (Brute Force)</button>
+</div>
+
+<script type="text/javascript">
+    // (() => {
+        let level = 3;
+        let sudoku;
+        let sudokuChecker;
+
+        let data = {
+            "cell_0_0": 6,
+            "cell_0_5": 9,
+            "cell_0_8": 1,
+            "cell_1_0": 8,
+            "cell_1_1": 3,
+            "cell_1_7": 4,
+            "cell_2_7": 2,
+            "cell_3_2": 7,
+            "cell_3_4": 3,
+            "cell_4_3": 5,
+            "cell_4_8": 8,
+            "cell_5_0": 2,
+            "cell_5_2": 4,
+            "cell_5_3": 6,
+            "cell_5_6": 7,
+            "cell_6_0": 4,
+            "cell_6_2": 5,
+            "cell_6_3": 8,
+            "cell_6_7": 6,
+            "cell_7_3": 9,
+            "cell_7_4": 2,
+            "cell_7_5": 4,
+            "cell_8_6": 3
+        };
+
+        const initUI = (level) => {
+            let dimensions = level * level;
+            let container = document.getElementById('container');
+            let container2 = document.getElementById('container2');
+            for (let i = 0; i < dimensions; i++) {
+                let row = document.createElement('div');
+                row.classList.add('row');
+                container.appendChild(row);
+                let row2 = row.cloneNode(true);
+                container2.appendChild(row2);
+
+                for (let j = 0; j < dimensions; j++) {
+                    let column = document.createElement('div');
+                    column.classList.add('column');
+                    column.classList.add('cell_'+i+'_'+j);
+                    let column2 = column.cloneNode(true);
+                    row.appendChild(column);
+                    row2.appendChild(column2);
+                    for (let k = 0; k < level; k++) {
+                        let smallrow = document.createElement('div');
+                        smallrow.classList.add('smallrow');
+                        column2.appendChild(smallrow);
+                        for (let l = 0; l < level; l++) {
+                            let smallcolumn = document.createElement('div');
+                            smallcolumn.classList.add('smallcolumn');
+                            smallcolumn.classList.add('help_' + (k*level+l+1));
+                            smallrow.appendChild(smallcolumn);
+                        }
+                    }
+                }
+
+            }
+            document.querySelectorAll('.column:nth-child(' + level + 'n)').forEach((el) => el.style.borderRightWidth = "4px");
+            document.querySelectorAll('.row:nth-child(' + level + 'n) .column').forEach((el) => el.style.borderBottomWidth = "4px");
+            document.querySelectorAll('.column:last-child').forEach((el) => el.style.borderRightWidth = "2px");
+            document.querySelectorAll('.row:last-child .column').forEach((el) => el.style.borderBottomWidth = "2px");
+
+            document.querySelectorAll('#container .column').forEach((el) => el.addEventListener('click', cellClicked));
+            window.addEventListener('keyup', keyPressed);
+        };
+
+        const updateUI = () => {
+            for (let i = 0; i < sudoku.length; i++) {
+                for (let j = 0; j < sudoku[i].length; j++) {
+                    if (sudoku[i][j] != 0) {
+                        document.querySelector("#container .cell_" + i + "_" + j).innerText = sudoku[i][j];
+                        document.querySelector("#container2 .cell_" + i + "_" + j).style.visibility = "hidden";
+                    }
+                    else {
+                        document.querySelector("#container .cell_" + i + "_" + j).innerText = '';
+                        document.querySelector("#container2 .cell_" + i + "_" + j).style.visibility = "visible";
+                    }
+                }
+            }
+
+            for (let i = 0; i < sudokuChecker.length; i++) {
+                for (let j = 0; j < sudokuChecker[i].length; j++) {
+                    for (let k = 0; k < sudokuChecker[i].length; k++) {
+                        if (sudokuChecker[i][j][k] === true) {
+                            document.querySelector("#container2 .cell_" + i + "_" + j + " .help_" + (k +1)).innerText = k+1;
+                        } else {
+                            document.querySelector("#container2 .cell_" + i + "_" + j + " .help_" + (k +1)).innerText = "";
+                        }
+                    }
+                }
+            }
+
+        };
+
+        let selectedCell = '';
+
+        const cellClicked = (e) => {
+            e.preventDefault();
+            document.querySelectorAll('.column').forEach((el) => el.classList.remove('selected'));
+            if (e.currentTarget.classList.item(1) === selectedCell) {
+                selectedCell = '';
+            } else {
+                e.currentTarget.classList.add('selected');
+                selectedCell = e.currentTarget.classList.item(1);
+            }
+        };
+
+        const keyPressed = (e) => {
+            e.preventDefault();
+            let value = e.which - 48;
+            if (e.which == 8) {
+                value = 0;
+            }
+            if (selectedCell && value >= 0 && value <= level*level) {
+                let parts = selectedCell.split('_');
+                sudoku[parts[1]][parts[2]] = value;
+                updateUI();
+            }
+        };
+
+        const initDataSets = (level) => {
+            let dimensions = level * level;
+            sudoku = [];
+            sudokuChecker = [];
+            for (let i = 0; i < dimensions; i++) {
+                sudoku.push([]);
+                sudokuChecker.push([]);
+                for (let j = 0; j < dimensions; j++) {
+                    sudoku[i].push(0);
+                    sudokuChecker[i].push([]);
+                    for (let k = 0; k < dimensions; k++) {
+                        sudokuChecker[i][j].push(true);
+                    }
+                }
+            }
+        };
+
+        const loadData = (data) => {
+            for (let key in data) {
+                let splits = key.split('_');
+                sudoku[splits[1]][splits[2]] = data[key];
+            }
+            eliminate();
+        };
+
+        const eliminate = () => {
+            for (let i = 0; i < sudoku.length; i++) {
+                for (let j = 0; j < sudoku[i].length ; j++) {
+                    // Check if we already have the number
+                    if (sudoku[i][j] !== 0) {
+                        //Eliminate all other numbers from current cell
+                        for (let k = 1; k <= sudokuChecker[i][j].length; k++) {
+                            sudokuChecker[i][j][k-1] = (k == sudoku[i][j]);
+                        }
+                        //Eliminate the number in all cells from same row
+                        for (let k = 0; k < sudoku[i].length; k++) {
+                            if (k != j) sudokuChecker[i][k][sudoku[i][j]-1] = false;
+                        }
+                        //Eliminate the number in all cells from same column
+                        for (let k = 0; k < sudoku.length; k++) {
+                            if (k != i) sudokuChecker[k][j][sudoku[i][j]-1] = false;
+                        }
+                        //Eliminate the number in the same supercell
+                        for (let k = Math.floor(i/level)* level; k < Math.floor(i/level)* level + level; k++) {
+                            for (let l = Math.floor(j/level)* level; l < Math.floor(j/level)* level + level; l++) {
+                                if (k != i && l != j) sudokuChecker[k][l][sudoku[i][j]-1] = false;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        const findNext = () => {
+            let found = false;
+            for (let i = 0; i < sudokuChecker.length; i++) {
+                for (let j = 0; j < sudokuChecker[0].length; j++) {
+                    if (sudoku[i][j] === 0) {
+                        let number = 0;
+                        let count = 0;
+                        for (let k = 0; k < sudokuChecker[i][j].length; k++) {
+                            if (sudokuChecker[i][j][k]) {
+                                count++
+                                number = k+1;
+                            }
+                        }
+                        if (count === 1) {
+                            sudoku[i][j] = number;
+                            found = true;
+                            eliminate();
+                        }
+                    }
+                }
+            }
+
+            return found;
+        };
+
+        const findSingle = () => {
+            let found = false;
+            //Check horizontal rows
+            for (let i = 0; i < sudokuChecker.length; i++) {
+                let counts = [0,0,0,0,0,0,0,0,0];
+                for (let j = 0; j < sudokuChecker[0].length; j++) {
+                    for (let k = 0; k < sudokuChecker[i][j].length; k++) {
+                        if (sudokuChecker[i][j][k] && sudoku[i][j] === 0) {
+                            counts[k]++;
+                        }
+                    }
+                }
+                for (let l = 0; l < counts.length; l++) {
+                    if (counts[l] === 1) {
+                        for (let j = 0; j < sudokuChecker[i].length; j++) {
+                            if (sudokuChecker[i][j][l]) {
+                                sudoku[i][j] = l+1;
+                                found = true;
+                                eliminate();
+                            }
+                        }
+                    }
+                }
+            }
+
+            //Check vertical rows
+            for (let j = 0; j < sudokuChecker.length; j++) {
+                let counts = [0,0,0,0,0,0,0,0,0];
+                for (let i = 0; i < sudokuChecker[0].length; i++) {
+                    for (let k = 0; k < sudokuChecker[i][j].length; k++) {
+                        if (sudokuChecker[i][j][k] && sudoku[i][j] === 0) {
+                            counts[k]++;
+                        }
+                    }
+                }
+                for (let l = 0; l < counts.length; l++) {
+                    if (counts[l] === 1) {
+                        for (let i = 0; i < sudokuChecker[j].length; i++) {
+                            if (sudokuChecker[i][j][l]) {
+                                sudoku[i][j] = l+1;
+                                found = true;
+                                eliminate();
+                            }
+                        }
+                    }
+                }
+            }
+
+            return found;
+        };
+
+        const solved = () => {
+            for (let i = 0; i < sudoku.length; i++) {
+                for (let j = 0; j < sudoku[i].length; j++) {
+                    if (sudoku[i][j] === 0) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        const solve = () => {
+            eliminate();
+            while (findNext()) {
+                eliminate();
+                updateUI();
+            }
+            if (!solved()) {
+                if (findSingle()) {
+                    solve();
+                }
+            }
+        };
+
+        let bruteForceCounter = 0;
+        let solvedSudoku = null;
+
+        const solveBruteForce = () => {
+            for (let i = 0; i < sudoku.length; i++) {
+                for (let j = 0; j < sudoku[i].length; j++) {
+                    if (sudoku[i][j] === 0) {
+                        for (let n = 1; n <= level*level; n++) {
+                            if (isPossible(i,j,n)) {
+                                sudoku[i][j] = n;
+                                solveBruteForce();
+                                sudoku[i][j] = 0;
+                            }
+                        }
+                        return;
+                    }
+                }
+            }
+            if (!solvedSudoku) {
+                solvedSudoku = JSON.parse(JSON.stringify(sudoku));
+            }
+            updateUI();
+            bruteForceCounter++;
+        };
+
+        const isPossible = (i ,j, n) => {
+            for (let k = 0; k < level*level; k++) {
+                if (sudoku[k][j] === n) {
+                    return false;
+                }
+                if (sudoku[i][k] === n) {
+                    return false;
+                }
+            }
+
+            //Eliminate the number in the same supercell
+            for (let k = Math.floor(i/level)* level; k < Math.floor(i/level)* level + level; k++) {
+                for (let l = Math.floor(j/level)* level; l < Math.floor(j/level)* level + level; l++) {
+                    if (k !== i && l !== j && sudoku[k][l] === n) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        };
+
+        const solveClick = () => {
+            solve();
+            updateUI();
+        };
+
+        const solveBruteForceClick = () => {
+            bruteForceCounter = 0;
+            solvedSudoku = null;
+            solveBruteForce();
+
+            if (solvedSudoku) {
+                sudoku=solvedSudoku;
+            }
+            updateUI();
+            alert(bruteForceCounter + " possible solutions found");
+        };
+
+        initDataSets(level);
+        loadData(data);
+        initUI(level);
+        updateUI();
+
+        document.getElementById("solve").addEventListener('click', solveClick);
+        document.getElementById("solveBruteForce").addEventListener('click', solveBruteForceClick);
+
+
+    // })();
+</script>
+
+</body>
+</html>
